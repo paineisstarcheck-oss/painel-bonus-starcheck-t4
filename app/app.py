@@ -58,21 +58,60 @@ def int_safe(x):
     except Exception:
         return 0
 
-# ===================== REGRAS (por mês) ==================
-LIMITE_TOTAL = 7
-LIMITE_GRAVES = 5
-
-def pct_qualidade_vistoriador(erros_total: float, erros_graves: float) -> float:
+def pct_safe(x) -> float:
     """
-    Retorna fração 0.0, 0.5 ou 1.0 para o indicador 'Qualidade' do Vistoriador.
-    - 1.0: <=7 totais e <=5 graves
+    Converte entradas em percentual para FRAÇÃO:
+    - 2,00% (texto) -> 0.02
+    - 0.02 (float) -> 0.02
+    - 2.0 (float, já em %) -> 0.02
+    """
+    if pd.isna(x):
+        return 0.0
+
+    # se vier como número
+    if isinstance(x, (int, float)):
+        v = float(x)
+        # Pandas geralmente lê 2% como 0.02 (fração)
+        # Se vier como 2.0 (percentual), converte
+        if v > 1.0:
+            return v / 100.0
+        return v
+
+    # se vier como texto "2,00%" ou "2.00%"
+    s = str(x).strip()
+    s = s.replace("%", "").strip().replace(".", "").replace(",", ".") if "," in s else s.replace("%", "").strip()
+    # atenção: se tinha vírgula decimal, acima removeu pontos de milhar
+    try:
+        v = float(s)
+        if v > 1.0:
+            return v / 100.0
+        return v
+    except Exception:
+        return 0.0
+
+def fmt_pct(fracao: float) -> str:
+    return f"{(0.0 if fracao is None else float(fracao)) * 100:.2f}%"
+
+# ===================== REGRAS (por mês) ==================
+# NOVA REGRA: limites em percentual (fração)
+# 3,5% -> 0.035 | 1,5% -> 0.015
+LIMITE_TOTAL = 0.035
+LIMITE_GRAVES = 0.015
+
+def pct_qualidade_vistoriador(erros_total_frac: float, erros_graves_frac: float) -> float:
+    """
+    Retorna fração 0.0, 0.5 ou 1.0 para o indicador 'Qualidade' do Vistoriador
+    baseado em percentuais (frações):
+    - 1.0: <=3,5% totais e <=1,5% graves
     - 0.5: estoura apenas um dos limites
     - 0.0: estoura os dois limites
     """
-    et = 0 if pd.isna(erros_total) else float(erros_total)
-    eg = 0 if pd.isna(erros_graves) else float(erros_graves)
+    et = 0.0 if pd.isna(erros_total_frac) else float(erros_total_frac)
+    eg = 0.0 if pd.isna(erros_graves_frac) else float(erros_graves_frac)
+
     total_ok = et <= LIMITE_TOTAL
     graves_ok = eg <= LIMITE_GRAVES
+
     if total_ok and graves_ok:
         return 1.0
     if (not total_ok and graves_ok) or (total_ok and not graves_ok):
@@ -139,7 +178,6 @@ def calcula_mes(df_mes: pd.DataFrame, nome_mes: str) -> pd.DataFrame:
                     perdas_cidades = []
                     for cidade_resp, peso_cid in cidades_resp.items():
                         bateu = ind_mes["producao_por_cidade"].get(cidade_resp, True)
-                        # parcela atribuída à cidade = parcela_total * (peso_da_cidade / soma_pesos)
                         parcela_cidade = parcela * (peso_cid / base_soma)
                         if not bateu:
                             perda_total += parcela_cidade
@@ -149,7 +187,6 @@ def calcula_mes(df_mes: pd.DataFrame, nome_mes: str) -> pd.DataFrame:
                     if perdas_cidades:
                         perdeu_itens.append("Produção – " + ", ".join(perdas_cidades))
                 else:
-                    # regra padrão: pela cidade do colaborador
                     bateu_prod = ind_mes["producao_por_cidade"].get(cidade, True)
                     if bateu_prod:
                         recebido += parcela
@@ -158,24 +195,23 @@ def calcula_mes(df_mes: pd.DataFrame, nome_mes: str) -> pd.DataFrame:
                         perdeu_itens.append("Produção – " + cidade.title())
                 continue
 
-            # QUALIDADE
+            # QUALIDADE (AGORA POR PERCENTUAL)
             if item == "Qualidade":
                 if func == "VISTORIADOR":
-                    et = int_safe(row.get("ERROS TOTAL", 0))
-                    eg = int_safe(row.get("ERROS GG", 0))
-                    frac = pct_qualidade_vistoriador(et, eg)
+                    et_frac = pct_safe(row.get("ERROS TOTAL", 0))
+                    eg_frac = pct_safe(row.get("ERROS GG", 0))
+                    frac = pct_qualidade_vistoriador(et_frac, eg_frac)
 
                     if frac == 1.0:
                         recebido += parcela
-                        # mantemos a contagem apenas para transparência (não será exibida como 'não entregue')
-                        perdeu_itens.append(f"Qualidade (100%) — erros: {et} | graves: {eg}")
+                        # não adiciona em "não entregues" quando foi 100%
                     elif frac == 0.5:
                         recebido += parcela * 0.5
                         perdas += parcela * 0.5
-                        perdeu_itens.append(f"Qualidade (50%) — erros: {et} | graves: {eg}")
+                        perdeu_itens.append(f"Qualidade (50%) — total {fmt_pct(et_frac)} | graves {fmt_pct(eg_frac)}")
                     else:
                         perdas += parcela
-                        perdeu_itens.append(f"Qualidade (0%) — erros: {et} | graves: {eg}")
+                        perdeu_itens.append(f"Qualidade (0%) — total {fmt_pct(et_frac)} | graves {fmt_pct(eg_frac)}")
                 else:
                     if not ind_mes["qualidade"]:
                         perdas += parcela
@@ -230,7 +266,6 @@ if filtro_mes == "TRIMESTRE":
 
     dados_full = pd.concat([dados_j, dados_a, dados_s], ignore_index=True)
 
-    # agrega por colaborador (soma meta/recebido/perda, % = recebido/meta)
     group_cols = ["CIDADE", "NOME", "FUNÇÃO", "DATA DE ADMISSÃO", "TEMPO DE CASA"]
     agg = (dados_full
            .groupby(group_cols, dropna=False)
@@ -245,7 +280,6 @@ if filtro_mes == "TRIMESTRE":
 
     agg["%"] = agg.apply(lambda r: 0.0 if r["META"] == 0 else (r["RECEBIDO"] / r["META"]) * 100.0, axis=1)
 
-    # indicadores perdidos agregados por pessoa (rótulo inclui o MÊS)
     perdas_por_pessoa = (
         dados_full
         .assign(_lost=lambda d: d.apply(
@@ -270,7 +304,6 @@ else:
         st.stop()
 
     dados_calc = calcula_mes(df_mes, filtro_mes)
-    # monta string simples com os itens perdidos no mês
     dados_calc["INDICADORES_NAO_ENTREGUES"] = dados_calc["perdeu_itens"].apply(
         lambda L: ", ".join(L) if isinstance(L, list) and L else ""
     )
@@ -315,7 +348,6 @@ with colC:
 st.markdown("### 👥 Colaboradores")
 cols = st.columns(3)
 
-# Ordenação (por % desc)
 dados_view = dados_view.sort_values(by="%", ascending=False)
 
 for idx, row in dados_view.iterrows():
@@ -328,8 +360,10 @@ for idx, row in dados_view.iterrows():
     perdidos_txt = texto_obs(row.get("INDICADORES_NAO_ENTREGUES", ""))
 
     is_vist = up(row["FUNÇÃO"]) == "VISTORIADOR"
-    erros_total_card = int_safe(row.get("ERROS TOTAL", 0)) if is_vist else 0
-    erros_gg_card = int_safe(row.get("ERROS GG", 0)) if is_vist else 0
+
+    # percentuais vindos do Excel (fração)
+    erros_total_pct = pct_safe(row.get("ERROS TOTAL", 0)) if is_vist else 0.0
+    erros_gg_pct = pct_safe(row.get("ERROS GG", 0)) if is_vist else 0.0
 
     bg = "#f9f9f9" if not badge else "#eeeeee"
 
@@ -355,13 +389,14 @@ for idx, row in dados_view.iterrows():
                 f"<div style='margin-top:8px;padding:6px 10px;border-radius:999px;display:inline-block;background:#444;color:#fff;font-size:12px;'>{badge}</div>",
                 unsafe_allow_html=True
             )
+
         if obs_txt:
             st.caption(f"Obs.: {obs_txt}")
 
-        # Só mostra 'não entregues' se houver de fato perda (evita 100%)
-        if perdidos_txt and "100%" not in perdidos_txt:
+        if perdidos_txt:
             st.caption(f"🔻 Indicadores não entregues: {perdidos_txt}")
 
         if is_vist:
-
-            st.caption(f"🧪 Qualidade — erros totais: {erros_total_card} | graves/gravíssimos: {erros_gg_card}")
+            st.caption(
+                f"🧪 Qualidade — erros totais: {fmt_pct(erros_total_pct)} | graves/gravíssimos: {fmt_pct(erros_gg_pct)}"
+            )
