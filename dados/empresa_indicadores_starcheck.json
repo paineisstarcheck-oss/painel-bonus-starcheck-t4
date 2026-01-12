@@ -1,0 +1,38 @@
+{
+  "OUTUBRO": {
+    "financeiro": true,
+    "qualidade": true,
+    "producao_por_cidade": {
+      "SÃO LUIS": true,
+      "BACABAL": true,
+      "BALSAS": true,
+      "PINHEIRO": false,
+      "CODÓ": true,
+      "CAXIAS": false
+    }
+  },
+  "NOVEMBRO": {
+    "financeiro": false,
+    "qualidade": true,
+    "producao_por_cidade": {
+      "SÃO LUIS": false,
+      "BACABAL": true,
+      "BALSAS": false,
+      "PINHEIRO": true,
+      "CODÓ": true,
+      "CAXIAS": true
+    }
+  },
+  "DEZEMBRO": {
+    "financeiro": false,
+    "qualidade": true,
+    "producao_por_cidade": {
+      "SÃO LUIS": true,
+      "BACABAL": true,
+      "BALSAS": false,
+      "PINHEIRO": false,
+      "CODÓ": true,
+      "CAXIAS": true
+    }
+  }
+}
