@@ -34,7 +34,7 @@ except Exception as e:
     st.error(f"Erro ao carregar JSONs: {e}")
     st.stop()
 
-MESES = ["TRIMESTRE", "JULHO", "AGOSTO", "SETEMBRO"]
+MESES = ["TRIMESTRE", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
 filtro_mes = st.radio("📅 Selecione o mês:", MESES, horizontal=True)
 
 def ler_planilha(mes: str) -> pd.DataFrame:
@@ -216,17 +216,17 @@ def calcula_mes(df_mes: pd.DataFrame, nome_mes: str) -> pd.DataFrame:
 # ===================== LER DADOS (MÊS OU TRIMESTRE) =====================
 if filtro_mes == "TRIMESTRE":
     try:
-        df_j = ler_planilha("JULHO")
-        df_a = ler_planilha("AGOSTO")
-        df_s = ler_planilha("SETEMBRO")
-        st.success("✅ Planilhas carregadas: JULHO, AGOSTO e SETEMBRO!")
+        df_j = ler_planilha("OUTUBRO")
+        df_a = ler_planilha("NOVEMBRO")
+        df_s = ler_planilha("DEZEMBRO")
+        st.success("✅ Planilhas carregadas: OUTUBRO, NOVEMBRO e DEZEMBRO!")
     except Exception as e:
         st.error(f"Erro ao ler a planilha: {e}")
         st.stop()
 
-    dados_j = calcula_mes(df_j, "JULHO")
-    dados_a = calcula_mes(df_a, "AGOSTO")
-    dados_s = calcula_mes(df_s, "SETEMBRO")
+    dados_j = calcula_mes(df_j, "OUTUBRO")
+    dados_a = calcula_mes(df_a, "NOVEMBRO")
+    dados_s = calcula_mes(df_s, "DEZEMBRO")
 
     dados_full = pd.concat([dados_j, dados_a, dados_s], ignore_index=True)
 
@@ -363,4 +363,5 @@ for idx, row in dados_view.iterrows():
             st.caption(f"🔻 Indicadores não entregues: {perdidos_txt}")
 
         if is_vist:
+
             st.caption(f"🧪 Qualidade — erros totais: {erros_total_card} | graves/gravíssimos: {erros_gg_card}")
